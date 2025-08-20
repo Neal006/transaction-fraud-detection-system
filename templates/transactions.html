@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Transaction List</h2>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newTransactionModal">
+            <i class="fas fa-plus"></i> New Transaction
+        </button>
+    </div>
+
+    <!-- Date Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="form-label">From Date</label>
+                    <input type="date" class="form-control" id="dateFromFilter">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">To Date</label>
+                    <input type="date" class="form-control" id="dateToFilter">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" id="applyFilters">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="card">
+        <div class="card-body">
+            <div id="initialMessage" class="text-center py-5">
+                <i class="fas fa-filter fa-3x mb-3 text-muted"></i>
+                <h4 class="text-muted">Select a date range and click "Apply Filters" to view transactions</h4>
+            </div>
+            <div id="loadingMessage" class="text-center py-5" style="display: none;">
+                <i class="fas fa-spinner fa-spin fa-3x mb-3 text-primary"></i>
+                <h4 class="text-muted">Loading transactions...</h4>
+            </div>
+            <div id="tableContainer" style="display: none;">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Transaction ID</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Account ID</th>
+                                <th>Device ID</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTable"></tbody>
+                    </table>
+                </div>
+                <div id="noDataMessage" class="text-center py-4" style="display: none;">
+                    <p class="text-muted">No transactions found for the selected date range.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Transaction Modal -->
+<div class="modal fade" id="newTransactionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">New Transaction</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newTransactionForm">
+                    <div class="mb-3">
+                        <label class="form-label">Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Account ID</label>
+                        <input type="text" class="form-control" name="accountId" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Device ID</label>
+                        <input type="text" class="form-control" name="deviceId" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Location</label>
+                        <input type="text" class="form-control" name="location" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="submitTransaction">Submit</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const newTransactionModal = new bootstrap.Modal(document.getElementById('newTransactionModal'));
+    
+    // Apply filters button click
+    document.getElementById('applyFilters').addEventListener('click', loadTransactions);
+    
+    // Submit new transaction
+    document.getElementById('submitTransaction').addEventListener('click', submitNewTransaction);
+    
+    function loadTransactions() {
+        const tableContainer = document.getElementById('tableContainer');
+        const initialMessage = document.getElementById('initialMessage');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const noDataMessage = document.getElementById('noDataMessage');
+        
+        const dateFrom = document.getElementById('dateFromFilter').value;
+        const dateTo = document.getElementById('dateToFilter').value;
+        
+        // Show loading state
+        initialMessage.style.display = 'none';
+        tableContainer.style.display = 'none';
+        loadingMessage.style.display = 'block';
+        
+        let url = '/api/admin/transactions';
+        const params = new URLSearchParams();
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (params.toString()) url += '?' + params.toString();
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                loadingMessage.style.display = 'none';
+                tableContainer.style.display = 'block';
+                
+                if (data.transactions.length === 0) {
+                    document.querySelector('.table-responsive').style.display = 'none';
+                    noDataMessage.style.display = 'block';
+                    return;
+                }
+                
+                document.querySelector('.table-responsive').style.display = 'block';
+                noDataMessage.style.display = 'none';
+                
+                const tbody = document.getElementById('transactionsTable');
+                tbody.innerHTML = '';
+                
+                data.transactions.forEach(tx => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${tx.transaction_id}</td>
+                        <td>${new Date(tx.timestamp).toLocaleString()}</td>
+                        <td>$${tx.amount.toFixed(2)}</td>
+                        <td>${tx.account_id}</td>
+                        <td>${tx.device_id}</td>
+                        <td>${tx.location}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => {
+                loadingMessage.style.display = 'none';
+                initialMessage.style.display = 'block';
+                alert('Error loading transactions: ' + error.message);
+            });
+    }
+    
+    function submitNewTransaction() {
+        const form = document.getElementById('newTransactionForm');
+        const formData = new FormData(form);
+        
+        const data = {
+            TransactionAmount: parseFloat(formData.get('amount')),
+            AccountID: formData.get('accountId'),
+            DeviceID: formData.get('deviceId'),
+            Location: formData.get('location')
+        };
+        
+        fetch('/api/transaction/new', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            newTransactionModal.hide();
+            form.reset();
+            loadTransactions();
+        })
+        .catch(error => {
+            alert('Error creating transaction: ' + error.message);
+        });
+    }
+});
+</script>
+{% endblock %} 

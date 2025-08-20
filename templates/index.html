@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="dashboard-content">
+    <!-- File Upload Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Upload Transaction Data</h5>
+                    <p class="card-text">Upload a CSV file containing transaction data for fraud detection analysis.</p>
+                    <form id="uploadForm" class="mb-3">
+                            <div class="mb-3">
+                            <label for="csvFile" class="form-label">Select CSV File</label>
+                            <input type="file" class="form-control" id="csvFile" accept=".csv" required>
+                                <div class="form-text">
+                                    Required columns: TransactionID, TransactionDate, TransactionAmount, AccountID, DeviceID, Location
+                                </div>
+                            </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-upload me-2"></i>Upload and Analyze
+                            </button>
+                        </form>
+                    <div id="uploadProgress" class="progress d-none">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+                </div>
+                            </div>
+                    </div>
+
+    <!-- Statistics Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <h5 class="card-title">Total Transactions</h5>
+                    <h2 class="card-text" id="totalTransactions">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                                <div class="card-body">
+                    <h5 class="card-title">High Risk</h5>
+                    <h2 class="card-text" id="highRiskCount">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+            <div class="card bg-warning">
+                                <div class="card-body">
+                    <h5 class="card-title">Medium Risk</h5>
+                    <h2 class="card-text" id="mediumRiskCount">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                                <div class="card-body">
+                                    <h5 class="card-title">Average Risk Score</h5>
+                    <h2 class="card-text" id="averageRiskScore">-</h2>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+    <!-- Charts -->
+    <div class="row mb-4">
+                        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Risk Score Distribution</h5>
+                    <canvas id="riskDistributionChart"></canvas>
+                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Fraud Trends</h5>
+                    <canvas id="fraudTrendsChart"></canvas>
+                </div>
+                            </div>
+                        </div>
+                    </div>
+
+    <!-- Risk Analysis -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Top Risk Factors</h5>
+                    <canvas id="riskFactorsChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">High Risk Transactions</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Transaction ID</th>
+                                        <th>Timestamp</th>
+                                        <th>Risk Score</th>
+                                        <th>Confidence</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                            <tbody id="highRiskTable"></tbody>
+                                    </table>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Loading State -->
+<div class="loading" id="loadingState">
+    <div class="spinner-border loading-spinner text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h3 class="mt-3">Loading Dashboard</h3>
+    <p>Please wait while we process the data...</p>
+                </div>
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadForm = document.getElementById('uploadForm');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const progressBar = uploadProgress.querySelector('.progress-bar');
+        const loadingState = document.getElementById('loadingState');
+    const dashboardContent = document.querySelector('.dashboard-content');
+    
+    // Initialize charts
+    let riskDistributionChart = null;
+    let fraudTrendsChart = null;
+    let riskFactorsChart = null;
+
+    uploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const fileInput = document.getElementById('csvFile');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert('Please select a CSV file');
+            return;
+        }
+        
+        if (!file.name.endsWith('.csv')) {
+            alert('Please upload a CSV file');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Show progress bar
+        uploadProgress.classList.remove('d-none');
+        progressBar.style.width = '0%';
+        
+        // Upload file
+        fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Hide progress bar and show success message
+            uploadProgress.classList.add('d-none');
+            alert('File uploaded and processed successfully!');
+            
+            // Load dashboard data
+            loadDashboardData();
+        })
+        .catch(error => {
+            uploadProgress.classList.add('d-none');
+            alert('Error: ' + error.message);
+        });
+        
+        // Simulate upload progress
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 5;
+            progressBar.style.width = `${Math.min(progress, 90)}%`;
+            if (progress >= 90) clearInterval(interval);
+        }, 100);
+    });
+
+    function loadDashboardData() {
+        loadingState.style.display = 'block';
+        dashboardContent.style.display = 'none';
+        
+        // Load statistics
+        fetch('/api/dashboard-stats')
+            .then(response => {
+                if (response.status === 403) {
+                    throw new Error('Access denied. Admin privileges required.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                document.getElementById('totalTransactions').textContent = data.total_transactions;
+                document.getElementById('highRiskCount').textContent = data.high_risk_count;
+                document.getElementById('mediumRiskCount').textContent = data.medium_risk_count;
+                document.getElementById('averageRiskScore').textContent = data.average_risk_score.toFixed(3);
+                
+                // Load charts
+                loadRiskDistribution();
+                loadFraudTrends();
+                loadRiskFactors();
+                loadHighRiskTransactions();
+                
+                loadingState.style.display = 'none';
+                dashboardContent.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error loading dashboard stats:', error);
+                loadingState.style.display = 'none';
+                dashboardContent.style.display = 'block';
+                
+                // Show error message to user
+                const errorMessage = document.createElement('div');
+                errorMessage.className = 'alert alert-danger';
+                errorMessage.innerHTML = `
+                    <h4 class="alert-heading">Access Denied</h4>
+                    <p>${error.message}</p>
+                    <hr>
+                    <p class="mb-0">Please contact your administrator for access to the dashboard.</p>
+                `;
+                dashboardContent.insertBefore(errorMessage, dashboardContent.firstChild);
+            });
+    }
+
+    function loadRiskDistribution() {
+        fetch('/api/risk-distribution')
+            .then(response => {
+                if (response.status === 403) {
+                    throw new Error('Access denied. Admin privileges required.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                const ctx = document.getElementById('riskDistributionChart').getContext('2d');
+                if (riskDistributionChart) {
+                    riskDistributionChart.destroy();
+                }
+                riskDistributionChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: data.data,
+                    options: data.options
+                });
+            })
+            .catch(error => console.error('Error loading risk distribution:', error));
+    }
+
+    function loadFraudTrends() {
+        fetch('/api/fraud-trends')
+            .then(response => {
+                if (response.status === 403) {
+                    throw new Error('Access denied. Admin privileges required.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                const ctx = document.getElementById('fraudTrendsChart').getContext('2d');
+                if (fraudTrendsChart) {
+                    fraudTrendsChart.destroy();
+                }
+                fraudTrendsChart = new Chart(ctx, {
+                    type: 'line',
+                    data: data.data,
+                    options: data.options
+                });
+            })
+            .catch(error => console.error('Error loading fraud trends:', error));
+    }
+
+    function loadRiskFactors() {
+        fetch('/api/risk-factors')
+            .then(response => {
+                if (response.status === 403) {
+                    throw new Error('Access denied. Admin privileges required.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                const ctx = document.getElementById('riskFactorsChart').getContext('2d');
+                if (riskFactorsChart) {
+                    riskFactorsChart.destroy();
+                }
+                riskFactorsChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: data.data,
+                    options: data.options
+                });
+            })
+            .catch(error => console.error('Error loading risk factors:', error));
+    }
+
+    function loadHighRiskTransactions() {
+        fetch('/api/high-risk-transactions')
+            .then(response => response.json())
+            .then(transactions => {
+                if (transactions.error) {
+                    throw new Error(transactions.error);
+                }
+                
+                const tbody = document.getElementById('highRiskTable');
+                tbody.innerHTML = '';
+                
+                transactions.forEach(tx => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${tx.transaction_id}</td>
+                        <td>${tx.timestamp}</td>
+                        <td>${tx.risk_score.toFixed(3)}</td>
+                        <td>${tx.confidence_score.toFixed(3)}</td>
+                        <td>
+                            <a href="/transaction/${tx.transaction_id}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            })
+            .catch(error => console.error('Error loading high risk transactions:', error));
+            }
+        });
+    </script>
+{% endblock %} 

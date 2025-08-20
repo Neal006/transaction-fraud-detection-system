@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="analytics-content">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title">Analytics Dashboard</h2>
+                    <p class="card-text">Comprehensive analysis of fraud patterns and trends.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <h3 id="total-transactions">-</h3>
+                <p>Total Transactions</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <h3 id="fraud-rate">-</h3>
+                <p>Fraud Rate (%)</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <h3 id="avg-risk-score">-</h3>
+                <p>Average Risk Score</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <h3 id="detection-rate">-</h3>
+                <p>Detection Rate (%)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Charts -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="graph-container">
+                <h5>Risk Score Distribution</h5>
+                <canvas id="risk-distribution"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="graph-container">
+                <h5>Fraud Trends Over Time</h5>
+                <canvas id="fraud-trends"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Factors Analysis -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Top Risk Factors</h5>
+                    <div class="graph-container">
+                        <canvas id="risk-factors"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- High Risk Analysis -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="graph-container">
+                <h5>High Risk Distribution</h5>
+                <canvas id="high-risk-distribution"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="graph-container">
+                <h5>Medium Risk Distribution</h5>
+                <canvas id="medium-risk-distribution"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div class="loading" id="loadingState">
+    <div class="spinner-border loading-spinner text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h3 class="mt-3">Loading Analytics Data</h3>
+    <p>Please wait while we process the analytics...</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize analytics data
+    loadAnalyticsData();
+    
+    // Set up auto-refresh every 5 minutes
+    setInterval(loadAnalyticsData, 300000);
+});
+
+function loadAnalyticsData() {
+    const loadingState = document.getElementById('loadingState');
+    const analyticsContent = document.querySelector('.analytics-content');
+    
+    loadingState.style.display = 'block';
+    analyticsContent.style.display = 'none';
+    
+    // Load dashboard stats for key metrics
+    fetch('/api/dashboard-stats')
+        .then(response => {
+            if (response.status === 403) {
+                throw new Error('Access denied. Admin privileges required.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            document.getElementById('total-transactions').textContent = data.total_transactions;
+            document.getElementById('avg-risk-score').textContent = data.average_risk_score.toFixed(2);
+            
+            // Calculate fraud rate
+            const fraudRate = ((data.high_risk_count + data.medium_risk_count) / data.total_transactions * 100).toFixed(2);
+            document.getElementById('fraud-rate').textContent = fraudRate + '%';
+            
+            // Calculate detection rate (assuming high risk transactions are detected)
+            const detectionRate = (data.high_risk_count / (data.high_risk_count + data.medium_risk_count) * 100).toFixed(2);
+            document.getElementById('detection-rate').textContent = detectionRate + '%';
+            
+            // Load all charts
+            loadRiskDistribution();
+            loadFraudTrends();
+            loadRiskFactors();
+            loadHighRiskDistribution();
+            loadMediumRiskDistribution();
+            
+            loadingState.style.display = 'none';
+            analyticsContent.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error loading analytics data:', error);
+            loadingState.style.display = 'none';
+            analyticsContent.style.display = 'block';
+            
+            // Show error message to user
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'alert alert-danger';
+            errorMessage.innerHTML = `
+                <h4 class="alert-heading">Access Denied</h4>
+                <p>${error.message}</p>
+                <hr>
+                <p class="mb-0">Please contact your administrator for access to the analytics dashboard.</p>
+            `;
+            analyticsContent.insertBefore(errorMessage, analyticsContent.firstChild);
+        });
+}
+
+function loadRiskDistribution() {
+    fetch('/api/risk-distribution')
+        .then(response => {
+            if (response.status === 403) {
+                throw new Error('Access denied. Admin privileges required.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const ctx = document.getElementById('risk-distribution').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: data.data,
+                options: data.options
+            });
+        })
+        .catch(error => console.error('Error loading risk distribution:', error));
+}
+
+function loadFraudTrends() {
+    fetch('/api/fraud-trends')
+        .then(response => {
+            if (response.status === 403) {
+                throw new Error('Access denied. Admin privileges required.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const ctx = document.getElementById('fraud-trends').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: data.data,
+                options: data.options
+            });
+        })
+        .catch(error => console.error('Error loading fraud trends:', error));
+}
+
+function loadRiskFactors() {
+    fetch('/api/risk-factors')
+        .then(response => {
+            if (response.status === 403) {
+                throw new Error('Access denied. Admin privileges required.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const ctx = document.getElementById('risk-factors').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: data.data,
+                options: data.options
+            });
+        })
+        .catch(error => console.error('Error loading risk factors:', error));
+}
+
+function loadHighRiskDistribution() {
+    fetch('/api/high-risk-distribution')
+        .then(response => {
+            if (response.status === 403) {
+                throw new Error('Access denied. Admin privileges required.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const ctx = document.getElementById('high-risk-distribution').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: data.data,
+                options: data.options
+            });
+        })
+        .catch(error => console.error('Error loading high risk distribution:', error));
+}
+
+function loadMediumRiskDistribution() {
+    fetch('/api/medium-risk-distribution')
+        .then(response => {
+            if (response.status === 403) {
+                throw new Error('Access denied. Admin privileges required.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const ctx = document.getElementById('medium-risk-distribution').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: data.data,
+                options: data.options
+            });
+        })
+        .catch(error => console.error('Error loading medium risk distribution:', error));
+}
+</script>
+{% endblock %} 

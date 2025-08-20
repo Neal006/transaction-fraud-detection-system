@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header with Logout -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Admin Panel</h2>
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+    </div>
+
+    <!-- File Information Card -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Current Dataset Information</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <label class="text-muted">File Name</label>
+                        <h5>
+                            <a href="#" id="fileName" class="text-decoration-none" onclick="downloadDataset(event)">
+                                <i class="fas fa-file-csv"></i> -
+                            </a>
+                        </h5>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <label class="text-muted">Upload Date</label>
+                        <h5 id="uploadDate">-</h5>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <label class="text-muted">File Size</label>
+                        <h5 id="fileSize">-</h5>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-item">
+                        <label class="text-muted">Rows × Columns</label>
+                        <h5 id="fileDimensions">-</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Management -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Transaction Management</h5>
+        </div>
+        <div class="card-body">
+            <!-- Filters -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <label class="form-label">Risk Level</label>
+                    <select class="form-select" id="riskLevelFilter">
+                        <option value="">All</option>
+                        <option value="A">High Risk (A)</option>
+                        <option value="B">Medium Risk (B)</option>
+                        <option value="C">Low Risk (C)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">From Date</label>
+                    <input type="date" class="form-control" id="dateFromFilter">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">To Date</label>
+                    <input type="date" class="form-control" id="dateToFilter">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" id="applyFilters">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+
+            <!-- Transactions Table -->
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Transaction ID</th>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Account ID</th>
+                            <th>Risk Level</th>
+                            <th>Risk Score</th>
+                            <th>Confidence</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Label Modal -->
+<div class="modal fade" id="editLabelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Risk Label</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editLabelForm">
+                    <input type="hidden" id="editTransactionId">
+                    <div class="mb-3">
+                        <label class="form-label">Risk Label</label>
+                        <select class="form-select" id="editRiskLabel" required>
+                            <option value="A">High Risk (A)</option>
+                            <option value="B">Medium Risk (B)</option>
+                            <option value="C">Low Risk (C)</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveLabel">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const editLabelModal = new bootstrap.Modal(document.getElementById('editLabelModal'));
+    let currentTransactionId = null;
+
+    // Load transactions on page load
+    loadDashboardData();
+
+    // Apply filters button click
+    document.getElementById('applyFilters').addEventListener('click', loadTransactions);
+
+    // Save label button click
+    document.getElementById('saveLabel').addEventListener('click', function() {
+        const newLabel = document.getElementById('editRiskLabel').value;
+        
+        fetch('/api/admin/update-label', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                transaction_id: currentTransactionId,
+                new_label: newLabel
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            editLabelModal.hide();
+            loadTransactions(); // Reload the table
+        })
+        .catch(error => {
+            alert('Error updating label: ' + error.message);
+        });
+    });
+
+    function loadTransactions() {
+        const riskLevel = document.getElementById('riskLevelFilter').value;
+        const dateFrom = document.getElementById('dateFromFilter').value;
+        const dateTo = document.getElementById('dateToFilter').value;
+
+        let url = '/api/admin/transactions';
+        const params = new URLSearchParams();
+        if (riskLevel) params.append('risk_level', riskLevel);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (params.toString()) url += '?' + params.toString();
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const tbody = document.getElementById('transactionsTable');
+                tbody.innerHTML = '';
+
+                data.transactions.forEach(tx => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${tx.transaction_id}</td>
+                        <td>${tx.timestamp}</td>
+                        <td>$${tx.amount.toFixed(2)}</td>
+                        <td>${tx.account_id}</td>
+                        <td>
+                            <span class="badge ${getRiskBadgeClass(tx.risk_level)}">
+                                ${getRiskLevelText(tx.risk_level)}
+                            </span>
+                        </td>
+                        <td>${tx.risk_score.toFixed(3)}</td>
+                        <td>${tx.confidence_score.toFixed(3)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary edit-label" data-id="${tx.transaction_id}">
+                                <i class="fas fa-edit"></i> Edit Label
+                            </button>
+                            <a href="/transaction/${tx.transaction_id}" class="btn btn-sm btn-info">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+
+                // Add event listeners to edit buttons
+                document.querySelectorAll('.edit-label').forEach(button => {
+                    button.addEventListener('click', function() {
+                        currentTransactionId = this.dataset.id;
+                        editLabelModal.show();
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error loading transactions:', error);
+                alert('Error loading transactions: ' + error.message);
+            });
+    }
+
+    function getRiskBadgeClass(level) {
+        switch (level) {
+            case 'A': return 'bg-danger';
+            case 'B': return 'bg-warning text-dark';
+            case 'C': return 'bg-success';
+            default: return 'bg-secondary';
+        }
+    }
+
+    function getRiskLevelText(level) {
+        switch (level) {
+            case 'A': return 'High Risk';
+            case 'B': return 'Medium Risk';
+            case 'C': return 'Low Risk';
+            default: return 'Unknown';
+        }
+    }
+
+    function loadDashboardData() {
+        fetch('/api/dashboard-stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Update file information
+                if (data.file_info) {
+                    const fileNameElement = document.getElementById('fileName');
+                    fileNameElement.innerHTML = `<i class="fas fa-file-csv"></i> ${data.file_info.filename}`;
+                    fileNameElement.href = '#';
+                    document.getElementById('uploadDate').textContent = data.file_info.upload_date;
+                    document.getElementById('fileSize').textContent = formatFileSize(data.file_info.size);
+                    document.getElementById('fileDimensions').textContent = `${data.file_info.rows} × ${data.file_info.columns}`;
+                }
+
+                // Load transactions
+                loadTransactions();
+            })
+            .catch(error => {
+                console.error('Error loading dashboard data:', error);
+                showError('Error loading dashboard data');
+            });
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Add download function
+    window.downloadDataset = function(event) {
+        event.preventDefault();
+        window.location.href = '/api/download-dataset';
+    };
+});
+</script>
+{% endblock %} 

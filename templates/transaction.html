@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction Details - Fraud Detection System{% endblock %}
+
+{% block content %}
+<div class="transaction-content">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h2 class="card-title">Transaction Details</h2>
+                            <p class="card-text mb-0">Transaction ID: <span id="transactionId">{{ transaction_id }}</span></p>
+                        </div>
+                        <button class="btn btn-primary" onclick="window.history.back()">
+                            <i class="fas fa-arrow-left"></i> Back
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Details -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Basic Information</h5>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <th>Timestamp</th>
+                                <td id="timestamp">-</td>
+                            </tr>
+                            <tr>
+                                <th>Amount</th>
+                                <td id="amount">-</td>
+                            </tr>
+                            <tr>
+                                <th>Account ID</th>
+                                <td id="accountId">-</td>
+                            </tr>
+                            <tr>
+                                <th>Device ID</th>
+                                <td id="deviceId">-</td>
+                            </tr>
+                            <tr>
+                                <th>Location</th>
+                                <td id="location">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Risk Assessment</h5>
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <th>Risk Level</th>
+                                <td><span id="riskLevel" class="badge">-</span></td>
+                            </tr>
+                            <tr>
+                                <th>Risk Score</th>
+                                <td id="riskScore">-</td>
+                            </tr>
+                            <tr>
+                                <th>Confidence Score</th>
+                                <td id="confidenceScore">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contributing Factors -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Contributing Risk Factors</h5>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Factor</th>
+                                    <th>Value</th>
+                                    <th>Impact</th>
+                                </tr>
+                            </thead>
+                            <tbody id="factorsTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Regulatory Concerns and Actions -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Regulatory Concerns</h5>
+                    <ul id="concernsList" class="list-group list-group-flush"></ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recommended Actions</h5>
+                    <ul id="actionsList" class="list-group list-group-flush"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div class="loading" id="loadingState">
+    <div class="spinner-border loading-spinner text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h3 class="mt-3">Loading Transaction Details</h3>
+    <p>Please wait while we fetch the transaction data...</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadTransactionDetails();
+});
+
+function loadTransactionDetails() {
+    const transactionId = document.getElementById('transactionId').textContent;
+    const loadingState = document.getElementById('loadingState');
+    const transactionContent = document.querySelector('.transaction-content');
+    
+    loadingState.style.display = 'block';
+    transactionContent.style.display = 'none';
+    
+    fetch(`/api/transaction/${transactionId}`)
+        .then(response => response.json())
+        .then(data => {
+            // Update basic information
+            document.getElementById('timestamp').textContent = data.timestamp;
+            document.getElementById('amount').textContent = `$${data.amount.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+            document.getElementById('accountId').textContent = data.account_id;
+            document.getElementById('deviceId').textContent = data.device_id;
+            document.getElementById('location').textContent = data.location;
+            
+            // Update risk assessment
+            const riskLevel = document.getElementById('riskLevel');
+            riskLevel.textContent = data.risk_level;
+            riskLevel.className = `badge bg-${data.risk_level === 'A' ? 'danger' : data.risk_level === 'B' ? 'warning' : 'success'}`;
+            document.getElementById('riskScore').textContent = data.risk_score.toFixed(3);
+            document.getElementById('confidenceScore').textContent = data.confidence_score.toFixed(3);
+            
+            // Update contributing factors
+            const factorsTable = document.getElementById('factorsTable');
+            factorsTable.innerHTML = '';
+            data.top_contributing_factors.forEach(factor => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${factor.feature}</td>
+                    <td>${factor.value.toFixed(2)}</td>
+                    <td>
+                        <div class="progress">
+                            <div class="progress-bar bg-danger" role="progressbar" 
+                                 style="width: ${Math.min(Math.abs(factor.zscore) * 20, 100)}%">
+                            </div>
+                        </div>
+                    </td>
+                `;
+                factorsTable.appendChild(row);
+            });
+            
+            // Update regulatory concerns
+            const concernsList = document.getElementById('concernsList');
+            concernsList.innerHTML = '';
+            data.regulatory_concerns.forEach(concern => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item';
+                li.innerHTML = `<i class="fas fa-exclamation-triangle text-warning me-2"></i>${concern}`;
+                concernsList.appendChild(li);
+            });
+            
+            // Update recommended actions
+            const actionsList = document.getElementById('actionsList');
+            actionsList.innerHTML = '';
+            data.recommended_actions.forEach(action => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item';
+                li.innerHTML = `<i class="fas fa-check-circle text-primary me-2"></i>${action}`;
+                actionsList.appendChild(li);
+            });
+            
+            loadingState.style.display = 'none';
+            transactionContent.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error loading transaction details:', error);
+            loadingState.style.display = 'none';
+            transactionContent.style.display = 'block';
+            alert('Error loading transaction details. Please try again.');
+        });
+}
+</script>
+{% endblock %} 
